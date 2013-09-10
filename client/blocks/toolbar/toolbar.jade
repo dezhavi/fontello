@@ -45,6 +45,15 @@
                 data-container='.navbar-fixed-top'
                 data-delay='{"show":500,"hide":100}'            
               )._popover= self.t('menu_import_config')
+           li: a(
+                href='#',
+                data-on-click='import.start',
+                data-content=self.t('menu_upload_custom_fonts_help'),
+                data-placement='left',
+                data-trigger='hover',
+                data-container='.navbar-fixed-top'
+                data-delay='{"show":500,"hide":100}'            
+              )._popover= self.t('menu_upload_custom_fonts')
           li.divider
           li: a(href='#', data-on-click='cmd:reset_selected')= self.t('menu_unselect_all')
           li: a(href='#', data-on-click='cmd:reset_all')= self.t('menu_reset_all')

@@ -13,7 +13,6 @@
 //= require_self
 //= require client
 
-
 window.NodecaLoader.execute(function (N, require) {
   'use strict';
 

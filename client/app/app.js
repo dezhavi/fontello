@@ -220,12 +220,14 @@ function FontModel(data) {
 
   // Array of font glyphs
   //
-  this.glyphs = _.map(data.glyphs, function (data) {
-    return new GlyphModel(this, data);
-  }, this);
 
+  this.glyphs=ko.observableArray(_.map(data.glyphs, function (data) {
+    return new GlyphModel(this, data);
+  }, this));
+  
   // Array of selected glyphs of a font
   //
+
   this.selectedGlyphs = ko.computed(function () {
     return _.filter(this.glyphs, function (glyph) { return glyph.selected(); });
   }, this).extend({ throttle: 100 });
@@ -238,8 +240,9 @@ function FontModel(data) {
 
   // Visible glyphs count
   //
+  console.log(this.glyphs());
   this.visibleCount = ko.computed(function () {
-    return _.reduce(this.glyphs, function (cnt, glyph) { return cnt + (glyph.visible() ? 1 : 0); }, 0);
+    return _.reduce(this.glyphs(), function (cnt, glyph) { return cnt + (glyph.visible() ? 1 : 0); }, 0);
   }, this).extend({ throttle: 100 });
 }
 

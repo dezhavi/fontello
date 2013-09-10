@@ -16,6 +16,9 @@ en-US:
   menu_import_config_help: >
     Select config.json or the whole fontello's zip archive.
     Also, you can drag and drop file to this page.
+  menu_upload_custom_fonts: Upload custom fonts
+  menu_upload_custom_fonts_help: >
+     You can upload custom fonts from SVG file
   menu_css_prefix_text: 'CSS prefix:'
   menu_css_use_suffix: add after icon name
 

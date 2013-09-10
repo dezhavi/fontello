@@ -3,8 +3,9 @@
 
 var _     = require('lodash');
 var async = require('async');
-
-
+var DOMParser = require('xmldom').DOMParser;
+var ko = require('knockout');
+// ke var svg2ttf = require('svg2ttf');
 ////////////////////////////////////////////////////////////////////////////////
 
 //
@@ -52,6 +53,115 @@ function import_config(str, file) {
   }
 }
 
+function getUnicode(character) {
+  if (character.length === 1) {
+    // 2 bytes
+    return character.charCodeAt(0);
+  } else if (character.length === 2) {
+    // 4 bytes
+    var surrogate1 = character.charCodeAt(0);
+    var surrogate2 = character.charCodeAt(1);
+    /*jshint bitwise: false*/
+    return ((surrogate1 & 0x3FF) << 10) + (surrogate2 & 0x3FF) + 0x10000;
+  }
+}
+
+function getGlyph(elem, font, num, isMissed) {
+
+  if (!isMissed) {
+    // Ignore empty glyphs (with empty code or path)
+    if (!elem.hasAttribute('d')) {
+      return null;
+    }
+  }
+
+  var glyph = {};
+
+  glyph.isMissed = isMissed;
+  glyph.d = elem.getAttribute('d') || '';
+  glyph.character = elem.getAttribute('unicode') || String.fromCharCode(0);
+  glyph.unicode = getUnicode(glyph.character) || num;
+  glyph.name = elem.getAttribute('glyph-name') || ('item' + glyph.unicode);
+
+  if (elem.getAttribute('horiz-adv-x')) {
+    glyph.width = _.parseInt(+elem.getAttribute('horiz-adv-x'));
+  }
+
+  return glyph;
+}
+
+//
+//generete unid glif
+//
+function generate_unid()
+{
+  var last;
+  var letters='abcdef1234567890';
+  var count=letters.length;
+  var intval = Math.round(new Date().getTime());
+  var result='';
+  result=intval;
+  var rnd=0;
+   var i = 1;
+  for(i=0;i<19;i++) {
+        rnd=Math.floor(Math.random() * (16 - 0 + 0)) + 0 ;
+        result+=letters[rnd];
+                     }
+return result;
+}
+
+//
+// Import svg. Try to determine content & call appropriate parsers
+//
+// data - byte array with svg content
+// file - original file info
+//
+function import_svg(str, file) {
+
+  try {
+   //var ttf = svg2ttf(fs.readFileSync('myfont.svg'));
+    var doc = (new DOMParser()).parseFromString(str, "application/xml");
+ 
+  var metadata = doc.getElementsByTagName('metadata')[0];
+  var fontElem = doc.getElementsByTagName('font')[0];
+  var fontFaceElem = fontElem.getElementsByTagName('font-face')[0];
+
+  var font = {
+    id: fontElem.getAttribute('id') || 'fontello',
+    familyName: fontFaceElem.getAttribute('font-family') || 'fontello',
+    glyphs: [],
+    segments: [],
+    missedGlyph: [],
+    stretch: fontFaceElem.getAttribute('font-stretch') || 'normal'
+  };
+  
+  var i = 1;
+  _.forEach(fontElem.getElementsByTagName('glyph'), function (glyphElem) {
+
+ var glyph = getGlyph(glyphElem, font, i, false);
+
+if(glyph)
+{
+
+ N.app.fontsList.fonts[0].glyphs.push(new GlyphModel(N.app.fontsList.fonts[0],  {
+        "css": "marquee",
+        "code": Math.floor(Math.random() * (6 - 1 + 0)) + 1 ,
+        "uid": generate_unid(),
+        "search": [
+          "marquee"
+        ],
+        "charRef": glyph.unicode!=undefined?glyph.unicode:65
+      })); 
+    
+    }
+  });
+
+  } catch (e) {
+    N.wire.emit('notify', t('error.bad_svg_format', { name: e.message }));
+  }
+}
+
+
 //
 // Import zip. Try to determine content & call appropriate parsers
 //
@@ -81,11 +191,144 @@ function import_zip(data, file) {
   }
 }
 
+
+// Int to char, with fix for big numbers
+// see https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/String/fromCharCode
+//
+function fixedFromCharCode(code) {
+  /*jshint bitwise: false*/
+  if (code > 0xffff) {
+    code -= 0x10000;
+
+    var surrogate1 = 0xd800 + (code >> 10)
+      , surrogate2 = 0xdc00 + (code & 0x3ff);
+
+    return String.fromCharCode(surrogate1, surrogate2);
+  } else {
+    return String.fromCharCode(code);
+  }
+}
+
+
+function GlyphModel(font, data) {
+
+  // Read-only properties
+  //
+  this.uid          = data.uid;
+  this.originalName = data.css;
+  this.originalCode = data.code;
+
+  //
+  // Helper properties
+  //
+
+  this.font = font;
+
+  // we search by name AND aliases
+  this.keywords = [this.originalName].concat(data.search || []).join(',');
+
+  this.charRef = fixedFromCharCode(data.charRef);
+  this.cssExt  = data['css-ext'];
+  this.tooltip = "name: '" + this.originalName + "'" +
+                 (data.search ? ',   tags: ' + data.search.join(', ') : '');
+
+  //
+  // Actual properties state
+  //
+
+  this.selected = ko.observable(false);
+  this.name     = ko.observable(this.originalName);
+  this.code     = ko.observable(this.originalCode);
+
+  this.selected.subscribe(function () {
+    N.wire.emit('session_save');
+  });
+
+  this.name.subscribe(function () {
+    N.wire.emit('session_save');
+  });
+
+  this.code.subscribe(function () {
+    N.wire.emit('session_save');
+  });
+
+  // Serialization. Make sure to update this method to have
+  // desired fields sent to the server (by font builder).
+  //
+  this.serialize = function () {
+    return {
+      uid:  this.uid
+    , css:  this.name()
+    , code: this.code()
+    , src:  this.font.fontname
+    };
+  }.bind(this);
+
+  //
+  // Helpers
+  //
+
+  this.toggleSelection = function () {
+    this.selected(!this.selected());
+  }.bind(this);
+
+  // Visibility depends only on search string:
+  // - if pattern is too short (0 or 1 symbols)
+  // - if pattern found in one of keywords
+  //
+  this.visible = ko.computed(function () {
+    var word = N.app.searchWord();
+    return (word.length < 2) || (0 <= this.keywords.indexOf(word));
+  }, this);
+
+  // code value as character (for code editor)
+  //
+  this.customChar = ko.computed({
+    read: function () {
+      return fixedFromCharCode(this.code());
+    }
+  , write: function (value) {
+      this.code(fixedCharCodeAt(value));
+    }
+  , owner: this
+  });
+
+  // code value as hex-string (for code editor)
+  //
+  this.customHex = ko.computed({
+    read: function () {
+      var code = this.code().toString(16).toUpperCase();
+      return "0000".substr(0, Math.max(4 - code.length, 0)) + code;
+    }
+  , write: function (value) {
+      // value must be HEX string - omit invalid chars
+      value = 0 + value.replace(/[^0-9a-fA-F]+/g, '');
+      this.code(parseInt(value, 16));
+    }
+  , owner: this
+  });
+
+  // Whenever or not glyph should be treaten as "modified"
+  //
+  this.isModified = function () {
+    return this.selected() ||
+      (this.name() !== this.originalName) ||
+      (this.code() !== this.originalCode);
+  }.bind(this);
+
+  // Register glyph in the names/codes swap-remap handlers.
+  //
+ // codesTracker.observe(this);
+ // namesTracker.observe(this);
+}
+
 // Handles change event of file input
 //
 function handleFileSelect(event) {
   event.stopPropagation();
   event.preventDefault();
+
+ 
 
   var files = [];
 
@@ -98,7 +341,7 @@ function handleFileSelect(event) {
     files = event.target.files;
   }
 
-  if (files === []) {
+  if (files === []) { 
     // Unexpected behavior. Should not happen in real life.
     N.wire.emit('notify', t('error.no_files_chosen'));
     return;
@@ -122,6 +365,16 @@ function handleFileSelect(event) {
         if (file.name.match(/[.]json$/)) {
           reader.onload = function (e) {
             import_config(e.target.result, file);
+            next();
+          };
+          reader.readAsText(file);
+          return;
+        }
+
+        // 
+        if (file.name.match(/[.]svg$/)) {
+          reader.onload = function (e) {
+            import_svg(e.target.result, file);
             next();
           };
           reader.readAsText(file);
@@ -164,7 +417,6 @@ N.wire.once('navigate.done', function () {
   //
   // Create regular files selector
   //
-
   var $input = $('<input type="file">');
 
   // !!! WARNING !!!
